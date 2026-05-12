@@ -1,22 +1,13 @@
 EDA - Billionaires Statistics 2023 🌍💰
+
 Opis projektu
+
 Projekt przedstawia wstępną analizę eksploracyjną danych (EDA) dotyczącą najbogatszych ludzi świata w roku 2023. Analiza została przeprowadzona w języku R i skupia się na zrozumieniu struktury światowego bogactwa, demografii miliarderów oraz różnic między poszczególnymi regionami i branżami.
 
 Wykorzystany zbiór danych
-Analiza bazuje na zbiorze "Billionaires Statistics Dataset" (2023), który zawiera szczegółowe informacje o osobach, których majątek netto przekroczył 1 mld USD. Dane obejmują zmienne takie jak:
+Analiza bazuje na zbiorze "Billionaires Statistics Dataset" (2023), który zawiera szczegółowe informacje o osobach, których majątek netto przekroczył 1 mld USD. Dane obejmują zmienne takie jak: Wartość majątku netto (Net Worth), Wiek i płeć, Kraj pochodzenia i PKB kraju, Branża (Category), Informacja o pochodzeniu majątku (Self-made vs. Inherited).
 
-Wartość majątku netto (Net Worth),
-
-Wiek i płeć,
-
-Kraj pochodzenia i PKB kraju,
-
-Branża (Category),
-
-Informacja o pochodzeniu majątku (Self-made vs. Inherited).
-
-Kluczowe pytania badawcze
-W ramach projektu staram się odpowiedzieć na następujące pytania:
+Kluczowe pytania badawcze:
 
 Czy wiek i płeć różnicują grupę najbogatszych?
 
@@ -26,7 +17,8 @@ Jak miliarderzy zdobywają swój majątek (praca własna vs. dziedziczenie)?
 
 Które branże generują największą liczbę miliarderów, a które największe średnie majątki?
 
-Wykorzystane technologie i biblioteki
+Wykorzystane technologie i biblioteki:
+
 Projekt został wykonany w środowisku RStudio przy użyciu formatu R Markdown. Wykorzystane pakiety:
 
 tidyverse & dplyr – obróbka i transformacja danych,
