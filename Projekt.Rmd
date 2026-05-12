@@ -1,0 +1,206 @@
+---
+title: "EDA - miliarderzy (2023)"
+author: "Szymon Haładyna"
+date: "2026-01-15"
+output: 
+  html_document:
+    theme: flatly        
+    toc: true            
+    toc_float: true      
+    code_folding: hide   
+---
+
+# Pakiety, których będę używał
+
+```{r biblioteki, message=FALSE, warning=FALSE}
+library("tidyverse")
+library("dplyr")
+library("ggplot2")
+library("treemapify")
+library("countrycode")
+```
+
+# Wprowadzenie do analizy
+Majątek najbogatszych ludzi świata to temat, który budzi wiele różnych emocji. Od podziwu dla ludzkiej przedsiębiorczości i innowacyjności, po dyskusje na temat nierówności społecznych. Gdyby razem zebrać pieniądze 10 najbogatszych ludzi świata, otrzymalibyśmy kwotę przewyższającą PKB wielu krajów.
+
+### O zbiorze danych
+W tym projekcie skupie się na analizie zbiór danych **"Billionaires Statistics Dataset"**, który zawiera szczegółowe informacje na temat najbogatszych ludzi świata. W zestawie danych znajdują się zmienne opisujące m.in.: wartość majątku, dane demograficzne, lokalizację, źródło majątku. Jak nazwa wskazuje w zbiorze mamy wszystkich ludzi, których majątek wyniósł 1mld dolarów lub więcej na rok **2023**.
+
+### Cel projektu
+Celem tej pracy jest przeprowadzeni EDA aby zrozumieć strukturę światowego bogactwa.
+
+W ramach analizy postaram się odpowiedzieć na pytania badawcze dotyczące:
+
+1. Czy wiek i płeć różnicują grupę najbogatszych?
+2. Gdzie na świecie koncentracja kapitału jest największa?
+3. Jak miliarderzy zdobywają swój majątek?
+4. Jakie branże tworzą miliarderów?
+
+Z danych wybieram `rank`, `personName`, `age`, `finalWorth`, `category`, `country`, `gender`, `selfMade`, `gdp_country`, które będą potrzebne do dalszej analizy.
+```{r wczytanie danych, message=FALSE, warning=FALSE, }
+dane <- read.csv("Billionaires.csv")
+dane <- dane %>%
+  select(rank, personName, age, finalWorth, category, country, gender, selfMade, gdp_country) 
+head(dane)
+```
+```{r}
+tail(dane)
+```
+### Struktura danych - `str()`
+```{r}
+str(dane)
+```
+Po wstępnej analize można zauważyć, ze `gdp_country`jest przedstawiony jako ciąg znaków i w dodatku zawiera przecinki i znak $. Jescze dodatkowo trzeba zmienić nazwy niektórych kolumn, np. finalworth nie jest zbytnio intuicyjne, lepsze będzie NetworthMln. `rank` nie jest unikalny, ale nie jestem jeszcze pewien, czy będzie to przeszkodą.
+
+### Obróbka danych
+```{r obróbka danych}
+dane <- dane %>%
+  select(Rank = rank, Name = personName, Age = age, NetWorthMln = finalWorth, Category = category, Country = country, Gender = gender, GdpCountry = gdp_country, SelfMade = selfMade) %>%
+  mutate(GdpCountryMld = parse_number(GdpCountry)/1000000000, NetWorthMld = NetWorthMln/1000)
+
+colSums(is.na(dane))
+```
+Dane zostały uporządkowane i wartości w kolumnach `GdpCountry` oraz `NetWorthMln` sprowadziłem do miliardów. Kolumny `Age` i `GdpCountryMld` ma braki, ale na razie nie będę usuwał wierszy z tymi brakami, żeby nie tracić innych potrzebnych danych na temat miliarderów. 
+
+# Analiza
+Po uporządkowaniu danych przejdźmy do głównej części analizy.  
+
+### Czy rzeczywiście największy majątek jest gromadzony w starszym wieku?
+```{r}
+dane %>% 
+  filter(!is.na(Age)) %>%
+  ggplot() + 
+  geom_histogram(aes(x = Age), color = "darkblue", fill = "lightblue", binwidth = 5) +
+  labs(title = "Rozkład wieku miliarderów", x = "Wiek", y = "Liczba osób") +
+  theme_light()
+median(dane$Age, na.rm = TRUE)
+```
+
+Tak jak można się było spodziewać, rozkład wieku jest mocno przesunięty w prawo. Mediana wynosi `r median(dane$Age, na.rm = TRUE)`, co wskazuje na to że ponad połowa miliarderów przekroczyła wiek emerytalny w Polsce. Młodzi miliarderzy to niewielki ułamek całej populacji miliarderów.
+
+Spójrzmy jeszcze na to jak wyglądają podstawowe statystyki opisowe dla poszczegółnych grup wiekowych, jeśli chodzi o zgromadzony majątek. 
+
+```{r}
+dane %>%
+  filter(!is.na(Age)) %>%
+  mutate(AgeGroup = cut(Age, breaks = c(0,30,45,60,75,90,105))) %>%
+  group_by(AgeGroup) %>%
+  summarise(liczba = n(), srednia = mean(NetWorthMld),mediana = median(NetWorthMld), max = max(NetWorthMld), zmienno = round(sd(NetWorthMld)/mean(NetWorthMld), 2))
+```
+Warto zauważyć, że wszędzie średnia jest większa od mediany, co oznacza że rozkład jest prawostronnie skośny. Również wraz z wiekiem rośnie średnia i mediana majątku, co oznacza że po prostu z czasem miliarderzy gromadzą co raz większe majątki. Współczynnik zmienności w każdej z grup jest bardzo duży, co pokazuje nam, że w każdej z grup mamy miliarderów ze skrajnie dużym majątkiem jak i skrajnie małym, jeśli można mówić o małym majątku.
+
+Dla pewności sprawdźmy jeszcze korelację między `Age`, a `NetWorthMld`.
+
+### Czy wiek jest skorelowany z majątkiem?
+Zaczniemy od korelacji Pearsona.
+```{r}
+cor(dane$Age, dane$NetWorthMld, use = "complete.obs")
+```
+Korelacja Pearsona jest znikoma, bliska zeru. Sprawdzę jeszcze dla pewności korelację Spearmana, która jest odporna na wartości odstające, czyl te gigantyczne majątki niewiwielu.
+```{r}
+cor(dane$Age, dane$NetWorthMld, use = "complete.obs", method = "spearman")
+```
+Nawet dla korelacji Spearmana ten wynik wskazują jedynie na bardzo słabą zależność, więc możemy stwierdzić że wiek nie jest wyznacznikiem zgromadzonych miliardów.
+
+### Czy rozkład majątku różni się między kobietami a mężczyznami, czy kobiety mają zdecydowanie mniejszy majątek?  
+```{r}
+dane %>%
+  filter(!is.na(Gender)) %>%
+  ggplot() +
+  geom_boxplot(aes(x = Gender, y = NetWorthMld, fill = Gender)) +
+  scale_y_log10() + 
+  labs(title = "Rozkład majątku według płci", x = "Płeć", y = "Majątek netto") +
+  theme_light()
+```
+
+Po boxplotach można zauważyć, że mediany są bardzo zbliżone do siebie, co sugeruje że przeciętny miliarder, miliarderka posiada podobny majątek. Boxplot dla płci męskiej wyróżnia się dużo ilością wartości odstających, co jasno wskazuje na to że czołówka największyc miliarderów to głównie mężczyźni. Warto też zauważyć, że dla osi y użyłem skali logarytmicznej, bez niej pudełka byłyby bardzo płaskie, ledwo widoczne. Przy normalnej skali, wizualnie wartości odstające byłyby o wiele dalej od pudełek. 
+
+### Jak skumulowane są majątki miliarderów według krajów?
+```{r}
+dane %>%
+  group_by(Country) %>%
+  summarise(TotalNetWorth = sum(NetWorthMld, na.rm = TRUE)) %>%
+  mutate(Ranking = row_number(desc(TotalNetWorth))) %>%
+  mutate(CountryGroup = if_else(Ranking <= 20, Country, "Reszta Świata")) %>%
+  group_by(CountryGroup) %>%
+  summarise(TotalNetWorth = sum(TotalNetWorth)) %>%
+  ggplot(aes(area = TotalNetWorth, fill = TotalNetWorth, label = CountryGroup)) +
+  geom_treemap() +
+  geom_treemap_text(colour = "white", place = "centre", reflow = TRUE) +
+  labs(title = "Top 20 krajów wg sumy majątku miliarderów", fill = "Suma majątów w mld $")
+```
+
+Największa okazała się suma majątków amerykańskich miliarderów, a drugi zaraz po nich majątek chińskich miliarderów. Razem zajmując około połowę całego wykresu. Blok `Reszta Świata` jest zaskakująco mały, jak na to, że zawiera pozostałe około 170 krajów, które nie znalazły się w top 20.
+
+### Skąd miliarderzy biorą swój majątek, ciężka praca czy odziedziczone bogactwo (według płci)?
+Teraz sprawdzę, w jaki sposób miliarderzy nabyli swój majątek, czy jest on odziedziczony, a może to wynik ciężkiej pracy. Dodatkowo zobaczę, czy są jakieś istotne różnice ze względu na płeć.
+
+```{r}
+dane %>%
+  filter(!is.na(Gender) & !is.na(SelfMade)) %>%
+  count(Gender, SelfMade) %>% 
+  group_by(Gender) %>%
+  mutate(Percent = n / sum(n)) %>%
+  ggplot(aes(x = Gender, y = Percent, fill = SelfMade)) +
+  geom_col(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = "Skąd pochodzą pieniądze miliarderów", x = "Płeć", y = "Udział procentowy") +
+  theme_light()
+```
+
+Ku mojemu zdziwieniu aż 72% miliarderek odziedziczyło swój majątek, natomiast w przypadku mężczyzn jedynie co 4 mężczyzna. Możemy jeszcze sprawdzić jak wygląda to na poszczególnych kontynentach, ale już bez podziału na płeć.
+
+### Czy źródła majątku różnią się, w zależności od kontynentu?
+
+```{r warning = FALSE}
+dane %>%
+  mutate(Continent = countrycode(sourcevar = Country, origin = "country.name", destination = "continent")) %>%
+  filter(!is.na(Continent)) %>%
+  ggplot(aes(x = Continent, fill = SelfMade)) +
+  geom_bar(position = "dodge") +
+  labs(title = "Selfmade według kontynentów", x = "Kontynent", y = "Liczba miliarderów", fill = "SelfMade") +
+  theme_light()
+```
+
+Już na pierwszy rzut oka można zauważyć, że w Europie stosunek miliarderów którzy odziedziczyli swój majątek do tych, którzy na niego zapracowali jest dużo wyższy niż w obu Amerykach i Azji. Mimo, iż mówi się że kraje azjatyckie są biedniejsze to właśnie tam jest największa liczba miliarderów, którzy uzyskali go w wyniku ciężkiej pracy. Może to swiadczyć o dynamicznym rozwoju tego regionu.
+Teraz już, wiemy w jaki sposób miliarderzy zgromadzili swój majątek w poszczególnych kontynentach, warto teraz spojrzeć, czy poszczególne branże mają na to wpływ.
+
+### Jaka branża wśród miliarderów jest najbardziej popularna, skąd biorą się ich majątki?
+
+Zdecydowałem się wybrać tylko 15 największych branż pod względem liczby miliarderów.
+```{r}
+dane %>%
+  count(Category) %>%
+  slice_max(n, n = 15) %>%
+  ggplot(aes(x = n, y = reorder(Category, n))) +
+  geom_point(size = 7, color = "darkgreen") +
+  geom_text(aes(label = n), color = "white", size = 2.5) +
+  labs(title = "Liczba miliarderów w poszczególnych sektorach", x = "Liczba osób",y = "") +
+  theme_light()
+```
+
+Dla mnie ciekawą informacją jest to, że sektor `Finance & Investments` jest dominującym. Przy obecnym postępie technologicznym można było się spodziewać, że to branża `Technology` zdominuje. Choć oczywiście ten sektor nie wiele ustępuje sektorowi finansów. Ale tak naprawdę miliarderem można zostać w prawie każdej dziedzinie po spojrzeniu na wykres. Ciekawe czy sektor finansów dominuje tylko pod względem ilościowyma, a może też pod względem ilości zgromadzonego kapitału?
+
+### Która branża przynosi największe zyski?
+```{r}
+dane %>%
+  group_by(Category) %>%
+  filter(n() > 20) %>% 
+  summarise(liczba = n(),srednia = mean(NetWorthMld),mediana = median(NetWorthMld), zmienno = sd(NetWorthMld)/mean(NetWorthMld)) %>%
+  arrange(desc(srednia))
+```
+Choć sektor finansów zajmował pierwsze miejsce pod względem ilości miliarderów, to pod względem średniej wielkości majątku zajmuje on dopiero 12 miejsce, więc można powiedzieć że to taka fabryka małych miliarderów. Na pierwszym miejscu znowu się spodziewałem branży technologicznej, a jednak to motoryzacyjna uplasowała się na szczycie. Jednak warto zauważyć, że do sektoru `Automotive` został zaliczony na przykład Elon Musk. Widać to po współczynniku zmienności, który w tej branży jest najwyższy.
+
+# Podsumowanie
+Wiek nie jest skorelowany z posiadanym majątkiem, nie ma znaczenia jak długo gromadzimy pieniądze. USA oraz Chiny posiadają miliarderów o największym skumulowanym kapitale, na oko odczytując z wykresu jest to połowa majątku miliarderów z całego świata. 
+
+W krajach obu Ameryk oraz krajach azjatyckich dominują miliarderzy, którzy swoje bogactwo zawdzięczają ciężkiej pracy. Natomiast w Europie większość majątków jest dziedziczonych. 
+
+Jeśli chodzi o płeć to znacząco różni się pochodzenie kapitału, zdecydowana większość miliarderek dziedziczy swój majątek, a u mężczyzn wręcz przeciwnie bo zdecydowana mniejszość. Networth obu tych grup dla jednej osoby jest podobny, choć do mężczyźni mają więcej przypadków odstających w pozytywnym znaczeniu.
+
+I na koniec branża, choć to sektor finansów okazał się najbardziej popularny/liczny wśród miliarderów to jednak średnio więcej zarabia się w branży motoryzacyjnej. 
+
+
+
+
+
